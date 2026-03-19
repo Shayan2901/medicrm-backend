@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MediCRM – Backend API
 
 Node.js + Express + MySQL backend for the MediCRM Healthcare CRM.
@@ -105,3 +106,6 @@ curl -X POST http://localhost:5000/api/leads \
 | deepa@medicrm.com | agent |
 | preet@medicrm.com | marketing |
 | sonal@medicrm.com | finance |
+=======
+# medicrm-backend
+>>>>>>> 957c5e697a8060094021f953dde1558dd91f28d1
