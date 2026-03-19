@@ -1,0 +1,3 @@
+const db = require('../config/db');
+exports.getAll  = async (req,res) => { try { const [r] = await db.query('SELECT id,name,email,role,is_active,created_at FROM users ORDER BY name'); res.json(r); } catch(e){res.status(500).json({error:e.message});} };
+exports.update  = async (req,res) => { try { const {name,role,is_active}=req.body; await db.query('UPDATE users SET name=COALESCE(?,name),role=COALESCE(?,role),is_active=COALESCE(?,is_active) WHERE id=?',[name||null,role||null,is_active!=null?is_active:null,req.params.id]); res.json({message:'User updated'}); } catch(e){res.status(500).json({error:e.message});} };
