@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   id           VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
   name         VARCHAR(100) NOT NULL,
   email        VARCHAR(150) NOT NULL UNIQUE,
-  password     VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
   role         ENUM('admin','cxo','marketing','finance','agent','calling_agent') NOT NULL DEFAULT 'agent',
   is_active    TINYINT(1)   NOT NULL DEFAULT 1,
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -67,8 +67,9 @@ CREATE TABLE IF NOT EXISTS doctors (
 -- ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS patients (
   id             VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
+  unique_pid     VARCHAR(20),
   full_name      VARCHAR(150) NOT NULL,
-  primary_phone  VARCHAR(20)  NOT NULL UNIQUE,   -- Unique patient identity
+  primary_phone  VARCHAR(20)  NOT NULL UNIQUE,
   email          VARCHAR(150),
   city           VARCHAR(100),
   age            INT,
@@ -89,7 +90,7 @@ CREATE TABLE IF NOT EXISTS leads (
   facility_id      VARCHAR(36)  NOT NULL,
   speciality_id    VARCHAR(36)  NOT NULL,
   doctor_id        VARCHAR(36),
-  assigned_to      VARCHAR(36),                  -- FK → users
+  assigned_to      VARCHAR(36),
 
   -- Enquiry details
   enquiry_type     ENUM('appointment','consultation','procedure','package','emergency','teleconsult') NOT NULL DEFAULT 'appointment',
@@ -193,20 +194,20 @@ CREATE TABLE IF NOT EXISTS revenue (
   appointment_id     VARCHAR(36)    NOT NULL,
   lead_id            VARCHAR(36)    NOT NULL,
   patient_id         VARCHAR(36)    NOT NULL,
-  consultation_fee   DECIMAL(12,2)  NOT NULL DEFAULT 0,
+  consultation_value DECIMAL(12,2)  NOT NULL DEFAULT 0,
   procedure_value    DECIMAL(12,2)  NOT NULL DEFAULT 0,
   package_value      DECIMAL(12,2)  NOT NULL DEFAULT 0,
-  total_revenue      DECIMAL(12,2)  GENERATED ALWAYS AS (consultation_fee + procedure_value + package_value) STORED,
+  total_value        DECIMAL(12,2)  GENERATED ALWAYS AS (consultation_value + procedure_value + package_value) STORED,
   payment_status     ENUM('pending','partial','paid','refunded') NOT NULL DEFAULT 'pending',
   notes              TEXT,
-  revenue_date       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  billed_date        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   FOREIGN KEY (appointment_id) REFERENCES appointments(id),
   FOREIGN KEY (lead_id)        REFERENCES leads(id),
   FOREIGN KEY (patient_id)     REFERENCES patients(id),
-  INDEX idx_rev_date (revenue_date)
+  INDEX idx_billed_date (billed_date)
 );
 
 -- ─────────────────────────────────────────
@@ -215,15 +216,53 @@ CREATE TABLE IF NOT EXISTS revenue (
 CREATE TABLE IF NOT EXISTS audit_logs (
   id           VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
   user_id      VARCHAR(36),
-  entity_type  VARCHAR(50)  NOT NULL,   -- 'lead', 'patient', 'appointment'
+  entity_type  VARCHAR(50)  NOT NULL,
   entity_id    VARCHAR(36)  NOT NULL,
-  action       VARCHAR(50)  NOT NULL,   -- 'CREATE', 'UPDATE', 'DELETE', 'STAGE_CHANGE'
+  action       VARCHAR(50)  NOT NULL,
   old_values   JSON,
   new_values   JSON,
   ip_address   VARCHAR(45),
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_entity (entity_type, entity_id),
   INDEX idx_user   (user_id)
+);
+
+-- ─────────────────────────────────────────
+-- 11. SYSTEM SETTINGS (Email config etc.)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS system_settings (
+  id            VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
+  setting_key   VARCHAR(100) NOT NULL UNIQUE,
+  setting_value TEXT,
+  updated_by    VARCHAR(36),
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ─────────────────────────────────────────
+-- 12. WEBHOOKS
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS webhooks (
+  id           VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
+  event_type   VARCHAR(100) NOT NULL UNIQUE,
+  url          TEXT         NOT NULL,
+  is_active    TINYINT(1)   NOT NULL DEFAULT 1,
+  created_by   VARCHAR(36),
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ─────────────────────────────────────────
+-- 13. AD SPEND
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS ad_spend (
+  id            VARCHAR(36)    PRIMARY KEY DEFAULT (UUID()),
+  channel       VARCHAR(100)   NOT NULL,
+  monthly_spend DECIMAL(12,2)  NOT NULL DEFAULT 0,
+  month         VARCHAR(7)     NOT NULL,
+  created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_channel_month (channel, month)
 );
 
 
@@ -256,7 +295,7 @@ INSERT IGNORE INTO doctors (id, name, speciality_id, facility_id, consult_type) 
   ('doc-kumar',  'Dr. Amit Kumar',   'sp-neuro',  'fac-medicare', 'opd');
 
 -- Admin user (password: Admin@123)
-INSERT IGNORE INTO users (id, name, email, password, role) VALUES
+INSERT IGNORE INTO users (id, name, email, password_hash, role) VALUES
   ('usr-admin',     'Rahul Chandra',   'admin@medicrm.com',     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
   ('usr-agent1',    'Ananya Sharma',   'ananya@medicrm.com',    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'calling_agent'),
   ('usr-agent2',    'Ravi Patel',      'ravi@medicrm.com',      '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'calling_agent'),
@@ -266,12 +305,12 @@ INSERT IGNORE INTO users (id, name, email, password, role) VALUES
   ('usr-cxo',       'Sanjay CXO',      'cxo@medicrm.com',       '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'cxo');
 
 -- Sample Patients
-INSERT IGNORE INTO patients (id, full_name, primary_phone, email, city, patient_type) VALUES
-  ('pat-001', 'Priya Sharma',  '9880001234', 'priya@email.com',  'Bengaluru', 'new'),
-  ('pat-002', 'Raj Kumar',     '9870005678', 'raj@email.com',    'Bengaluru', 'new'),
-  ('pat-003', 'Sunita Reddy',  '9860009012', 'sunita@email.com', 'Bengaluru', 'existing'),
-  ('pat-004', 'Arjun Das',     '9850003456', 'arjun@email.com',  'Bengaluru', 'new'),
-  ('pat-005', 'Meena Joshi',   '9840007890', 'meena@email.com',  'Bengaluru', 'new');
+INSERT IGNORE INTO patients (id, unique_pid, full_name, primary_phone, email, city, patient_type) VALUES
+  ('pat-001', 'PAT-00001', 'Priya Sharma',  '9880001234', 'priya@email.com',  'Bengaluru', 'new'),
+  ('pat-002', 'PAT-00002', 'Raj Kumar',     '9870005678', 'raj@email.com',    'Bengaluru', 'new'),
+  ('pat-003', 'PAT-00003', 'Sunita Reddy',  '9860009012', 'sunita@email.com', 'Bengaluru', 'existing'),
+  ('pat-004', 'PAT-00004', 'Arjun Das',     '9850003456', 'arjun@email.com',  'Bengaluru', 'new'),
+  ('pat-005', 'PAT-00005', 'Meena Joshi',   '9840007890', 'meena@email.com',  'Bengaluru', 'new');
 
 -- Sample Leads
 INSERT IGNORE INTO leads (id, patient_id, facility_id, speciality_id, doctor_id, assigned_to, enquiry_type, medical_concern, lead_source, lead_medium, campaign_name, lead_stage, lead_substage, ai_score) VALUES
@@ -339,11 +378,11 @@ FROM leads;
 
 CREATE OR REPLACE VIEW v_revenue_summary AS
 SELECT
-  COALESCE(SUM(r.total_revenue), 0)       AS total_revenue,
-  COALESCE(AVG(r.total_revenue), 0)       AS avg_revenue_per_lead,
-  COUNT(r.id)                             AS paid_leads,
-  sp.name                                 AS speciality,
-  f.name                                  AS facility
+  COALESCE(SUM(r.total_value), 0)       AS total_revenue,
+  COALESCE(AVG(r.total_value), 0)       AS avg_revenue_per_lead,
+  COUNT(r.id)                           AS paid_leads,
+  sp.name                               AS speciality,
+  f.name                                AS facility
 FROM revenue r
 JOIN leads      l   ON l.id  = r.lead_id
 JOIN facilities f   ON f.id  = l.facility_id

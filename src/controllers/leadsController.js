@@ -119,7 +119,7 @@ exports.createLead = async (req, res) => {
     const [leadIns] = await conn.query(
       `INSERT INTO leads (patient_id,facility_id,speciality_id,doctor_id,assigned_to,
         enquiry_type,medical_concern,urgency,lead_source,lead_medium,campaign_name,
-        utm_source,utm_medium,utm_campaign,utm_term,utm_content,stage,substage,followup_date)
+        utm_source,utm_medium,utm_campaign,utm_term,utm_content,lead_stage,lead_substage,followup_date)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [patientId,facility_id,speciality_id,doctor_id||null,assigned_to||null,
        enquiry_type,medical_concern||null,urgency,lead_source,lead_medium||null,campaign_name||null,

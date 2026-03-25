@@ -35,7 +35,7 @@ exports.createRevenue = async (req, res) => {
     const [ins] = await db.query(
       'INSERT INTO revenue (appointment_id,lead_id,patient_id,consultation_value,procedure_value,package_value,payment_status,notes,billed_date) VALUES (?,?,?,?,?,?,?,?,?)',
       [appointment_id, lead_id, patient_id, consultation_value, procedure_value, package_value, payment_status, notes||null, billed_date||null]);
-    await db.query("UPDATE leads SET stage='Customer', substage='Revenue Captured' WHERE id=?", [lead_id]);
+    await db.query("UPDATE leads SET lead_stage='customer', lead_substage='Revenue Captured' WHERE id=?", [lead_id]);
     res.status(201).json({ message: 'Revenue recorded', id: ins.insertId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };

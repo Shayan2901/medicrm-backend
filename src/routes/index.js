@@ -156,7 +156,7 @@ router.post('/users',          auth(['admin']),        async (req, res) => {
     if (existing.length) return res.status(409).json({ error: 'Email already registered' });
     const hash = await bcrypt.hash(password, 10);
     const [result] = await db.query(
-      'INSERT INTO users (name, email, password, role, is_active) VALUES (?,?,?,?,1)',
+      'INSERT INTO users (name, email, password_hash, role, is_active) VALUES (?,?,?,?,1)',
       [name, email, hash, role || 'agent']);
     res.status(201).json({ success: true, id: result.insertId });
   } catch (err) { res.status(500).json({ error: err.message }); }

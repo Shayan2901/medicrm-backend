@@ -57,6 +57,16 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api', routes);
 
 // ─── HEALTH CHECK ────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'MediCRM API is running',
+    version: '1.0.0',
+    health: '/health',
+    api: '/api',
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
